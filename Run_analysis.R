@@ -13,35 +13,22 @@ library(reshape2)
                           # STEP 0A - Get data
                          #####################
 
-# download zip file containing data if it hasn't already been downloaded
-
-zipUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-zipFile <- "UCI HAR Dataset.zip"
-
-if (!file.exists(zipFile)) {
-  download.file(zipUrl, zipFile,mode = "wb")
-}
-
-# unzip zip file containing data if data directory doesn't already exist
-dataPath <- "UCI HAR Dataset"
-if (!file.exists(dataPath)) {
-  unzip(zipFile)
-}
+featureNames <- read.table("UCI HAR Dataset/features.txt")
+activityLabels <- read.table("UCI HAR Dataset/activity_labels.txt", header = FALSE)
 
                             #########################
                             # STEP 0B - Read data
                             #########################
 
 # read training data
-trainingSubjects <- read.table(file.path(dataPath, "train", "subject_train.txt"))
-trainingValues <- read.table(file.path(dataPath, "train", "X_train.txt"))
-trainingActivity <- read.table(file.path(dataPath, "train", "y_train.txt"))
+subjectTrain <- read.table("UCI HAR Dataset/train/subject_train.txt", header = FALSE)
+activityTrain <- read.table("UCI HAR Dataset/train/y_train.txt", header = FALSE)
+featuresTrain <- read.table("UCI HAR Dataset/train/X_train.txt", header = FALSE)
 
 # read test data
-testSubjects <- read.table(file.path(dataPath, "test", "subject_test.txt"))
-testValues <- read.table(file.path(dataPath, "test", "X_test.txt"))
-testActivity <- read.table(file.path(dataPath, "test", "y_test.txt"))
-
+subjectTest <- read.table("UCI HAR Dataset/test/subject_test.txt", header = FALSE)
+activityTest <- read.table("UCI HAR Dataset/test/y_test.txt", header = FALSE)
+featuresTest <- read.table("UCI HAR Dataset/test/X_test.txt", header = FALSE)
 #Read the features data
 features = read.table(file.path(dataPath, "features.txt"),header = FALSE)
 #Read activity labels data
@@ -51,12 +38,15 @@ activityLabels = read.table(file.path(dataPath, "activity_labels.txt"),header = 
 # Step 1 - Merge the training and the test sets to create one data set
 ##############################################################################
 
-train <- cbind(trainingSubjects,trainingValues,trainingActivity)
-test <- cbind(testSubjects, testValues, testActivity)
+subject <- rbind(subjectTrain, subjectTest)
+activity <- rbind(activityTrain, activityTest)
+features <- rbind(featuresTrain, featuresTest)
 
-allData <- rbind(train, test)
+colnames(features) <- t(featureNames[2])
 
-colnames(allData) <- c("subject", "values", "activities")
+colnames(activity) <- "Activity"
+colnames(subject) <- "Subject"
+completeData <- cbind(features,activity,subject)
 
 head(allData,5)
 
@@ -65,52 +55,44 @@ head(allData,5)
                 # Step 2 - Extract feature cols & names named 'mean, std'
                 ##########################################################
 
-columnsToKeep <- grepl("subject|activity|mean|std", colnames(humanActivityCols))
+columnsWithMeanSTD <- grep(".*Mean.*|.*Std.*", names(completeData), ignore.case=TRUE)
 
-# ... and keep data in these columns only
-humanActivityCols <- humanActivityCols[, columnsToKeep]
+requiredColumns <- c(columnsWithMeanSTD, 562, 563)
+dim(completeData)
 
-humanActivityCols
-
+extractedData <- completeData[,requiredColumns]
+dim(extractedData)
 
 ##############################################################################
 # Step 3 - Use descriptive activity names to name the activities in the data set
 ##############################################################################
-setWithActivityNames = merge(setForMeanAndStd, activityLabels, by='activityId', all.x=TRUE)
+extractedData$Activity <- as.character(extractedData$Activity)
+for (i in 1:6){
+extractedData$Activity[extractedData$Activity == i] <- as.character(activityLabels[i,2])
+}
 
+extractedData$Activity <- as.factor(extractedData$Activity)
 
 ##############################################################################
 # Step 4 - Appropriately label the data set with descriptive variable names
 ##############################################################################
 
-humanActivity <- rbind(
-  cbind(trainingSubjects, trainingValues, trainingActivity),
-  cbind(testSubjects, testValues, testActivity)
-)
+names(extractedData)
 
-# get column names
-humanActivityCols <- colnames(humanActivity)
+names(extractedData)<-gsub("Acc", "Accelerometer", names(extractedData))
+names(extractedData)<-gsub("Gyro", "Gyroscope", names(extractedData))
+names(extractedData)<-gsub("BodyBody", "Body", names(extractedData))
+names(extractedData)<-gsub("Mag", "Magnitude", names(extractedData))
+names(extractedData)<-gsub("^t", "Time", names(extractedData))
+names(extractedData)<-gsub("^f", "Frequency", names(extractedData))
+names(extractedData)<-gsub("tBody", "TimeBody", names(extractedData))
+names(extractedData)<-gsub("-mean()", "Mean", names(extractedData), ignore.case = TRUE)
+names(extractedData)<-gsub("-std()", "STD", names(extractedData), ignore.case = TRUE)
+names(extractedData)<-gsub("-freq()", "Frequency", names(extractedData), ignore.case = TRUE)
+names(extractedData)<-gsub("angle", "Angle", names(extractedData))
+names(extractedData)<-gsub("gravity", "Gravity", names(extractedData))
 
-# remove special characters
-humanActivityCols <- gsub("[\\(\\)-]", "", humanActivityCols)
-
-# expand abbreviations and clean up names
-humanActivityCols <- gsub("^f", "frequencyDomain", humanActivityCols)
-humanActivityCols <- gsub("^t", "timeDomain", humanActivityCols)
-humanActivityCols <- gsub("Acc", "Accelerometer", humanActivityCols)
-humanActivityCols <- gsub("Gyro", "Gyroscope", humanActivityCols)
-humanActivityCols <- gsub("Mag", "Magnitude", humanActivityCols)
-humanActivityCols <- gsub("Freq", "Frequency", humanActivityCols)
-humanActivityCols <- gsub("mean", "Mean", humanActivityCols)
-humanActivityCols <- gsub("std", "StandardDeviation", humanActivityCols)
-
-# correct typo
-humanActivityCols <- gsub("BodyBody", "Body", humanActivityCols)
-
-# use new labels as column names
-colnames(humanActivity) <- humanActivityCols
-
-humanActivityCols
+names(extractedData)
 
 
 ##############################################################################
@@ -118,9 +100,12 @@ humanActivityCols
 #          variable for each activity and each subject
 ##############################################################################
 
+extractedData$Subject <- as.factor(extractedData$Subject)
+extractedData <- data.table(extractedData)
+
 # group by subject and activity and summarise using mean
-humanActivityMeans <- humanActivity %>% 
-  group_by(subject, activity) %>%
+humanActivityMeans <- extractedData %>% 
+  group_by(Subject, Activity) %>%
   summarise_each(funs(mean))
 
 # output to file "tidy_data.txt"
